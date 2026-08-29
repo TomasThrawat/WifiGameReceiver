@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">WifiGameReceiver</string>
     <string name="grant_shizuku">Grant Shizuku permission</string>
+    <string name="battery_optimization">Disable battery optimization</string>
+    <string name="battery_optimization_already_disabled">Battery optimization already disabled</string>
     <string name="port_hint">UDP port (e.g. 5577)</string>
     <string name="start">Start</string>
     <string name="stop">Stop</string>

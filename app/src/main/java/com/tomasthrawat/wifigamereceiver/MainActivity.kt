@@ -2,7 +2,10 @@ package com.tomasthrawat.wifigamereceiver
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -30,6 +33,7 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
         updateStatus()
 
         binding.btnGrantShizuku.setOnClickListener { requestShizuku() }
+        binding.btnBatteryOpt.setOnClickListener { requestBatteryOptimizationExemption() }
         binding.btnStart.setOnClickListener {
             if (!serviceRunning) startReceiver() else stopReceiver()
         }
@@ -44,6 +48,16 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
     override fun onPause() {
         Shizuku.removeRequestPermissionResultListener(this)
         super.onPause()
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        if (pm.isIgnoringBatteryOptimizations(packageName)) {
+            Toast.makeText(this, getString(R.string.battery_optimization_already_disabled), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+        startActivity(intent)
     }
 
     private fun requestShizuku() {
