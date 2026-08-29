@@ -1,0 +1,5 @@
+<resources>
+    <color name="oled_black">#000000</color>
+    <color name="oled_white">#FFFFFF</color>
+    <color name="accent">#4FC3F7</color>
+</resources>

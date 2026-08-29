@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">WifiGameReceiver</string>
+    <string name="grant_shizuku">Grant Shizuku permission</string>
+    <string name="port_hint">UDP port (e.g. 5577)</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="invalid_port">Enter a port between 1024 and 65535</string>
+    <string name="grant_shizuku_first">Grant Shizuku permission first</string>
+    <string name="shizuku_not_running">Shizuku is not running — start it first</string>
+    <string name="shizuku_permission_denied">Shizuku permission denied</string>
+    <string name="status_ready">Shizuku: ready</string>
+    <string name="status_not_ready">Shizuku: not connected</string>
+    <string name="channel_name">Gamepad receiver</string>
+    <string name="notification_title">WifiGameReceiver running</string>
+    <string name="notification_text">Listening on UDP port %1$d</string>
+</resources>
