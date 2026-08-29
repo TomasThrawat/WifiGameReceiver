@@ -1,5 +1,6 @@
 package com.tomasthrawat.wifigamereceiver
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -51,6 +52,10 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
         super.onPause()
     }
 
+    private fun isBatteryOptimizationScreenAvailable(intent: Intent): Boolean {
+        return intent.resolveActivity(packageManager) != null
+    }
+
     private fun requestBatteryOptimizationExemption() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         if (pm.isIgnoringBatteryOptimizations(packageName)) {
@@ -59,7 +64,17 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
             return
         }
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
-        startActivity(intent)
+        if (!isBatteryOptimizationScreenAvailable(intent)) {
+            Toast.makeText(this, getString(R.string.battery_optimization_unsupported), Toast.LENGTH_LONG).show()
+            binding.btnBatteryOpt.visibility = View.GONE
+            return
+        }
+        try {
+            startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(this, getString(R.string.battery_optimization_unsupported), Toast.LENGTH_LONG).show()
+            binding.btnBatteryOpt.visibility = View.GONE
+        }
     }
 
     private fun requestShizuku() {
@@ -118,6 +133,8 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
 
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         val batteryExempt = pm.isIgnoringBatteryOptimizations(packageName)
-        binding.btnBatteryOpt.visibility = if (batteryExempt) View.GONE else View.VISIBLE
+        val batteryIntent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+        val batterySupported = isBatteryOptimizationScreenAvailable(batteryIntent)
+        binding.btnBatteryOpt.visibility = if (batteryExempt || !batterySupported) View.GONE else View.VISIBLE
     }
 }
