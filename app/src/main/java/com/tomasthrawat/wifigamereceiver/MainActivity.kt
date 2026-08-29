@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -54,6 +55,7 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         if (pm.isIgnoringBatteryOptimizations(packageName)) {
             Toast.makeText(this, getString(R.string.battery_optimization_already_disabled), Toast.LENGTH_SHORT).show()
+            updateStatus()
             return
         }
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
@@ -112,5 +114,10 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
         val shizukuReady = Shizuku.pingBinder() &&
             Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
         binding.textStatus.text = if (shizukuReady) getString(R.string.status_ready) else getString(R.string.status_not_ready)
+        binding.btnGrantShizuku.visibility = if (shizukuReady) View.GONE else View.VISIBLE
+
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        val batteryExempt = pm.isIgnoringBatteryOptimizations(packageName)
+        binding.btnBatteryOpt.visibility = if (batteryExempt) View.GONE else View.VISIBLE
     }
 }
