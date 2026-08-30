@@ -122,6 +122,9 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
     private fun updateStatus() {
         val shizukuReady = Shizuku.pingBinder() &&
             Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        if (shizukuReady && !GamepadBridge.isBound) {
+            GamepadBridge.bind()
+        }
         binding.textStatus.text = if (shizukuReady) getString(R.string.status_ready) else getString(R.string.status_not_ready)
         binding.btnGrantShizuku.visibility = if (shizukuReady) View.GONE else View.VISIBLE
 
