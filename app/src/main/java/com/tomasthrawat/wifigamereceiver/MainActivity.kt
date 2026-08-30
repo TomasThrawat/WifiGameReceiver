@@ -28,7 +28,7 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
         Shizuku.addBinderReceivedListenerSticky { updateStatus() }
         Shizuku.addBinderDeadListener { updateStatus() }
 
-        binding.editPort.setText("5577")
+        binding.editPort.setText("5555")
         updateStatus()
 
         binding.btnGrantShizuku.setOnClickListener { requestShizuku() }
