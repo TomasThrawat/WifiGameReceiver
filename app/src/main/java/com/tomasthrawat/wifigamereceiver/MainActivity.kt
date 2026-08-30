@@ -1,12 +1,9 @@
 package com.tomasthrawat.wifigamereceiver
 
-import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
-import android.provider.Settings
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -52,10 +49,6 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
         super.onPause()
     }
 
-    private fun isBatteryOptimizationScreenAvailable(intent: Intent): Boolean {
-        return intent.resolveActivity(packageManager) != null
-    }
-
     private fun requestBatteryOptimizationExemption() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         if (pm.isIgnoringBatteryOptimizations(packageName)) {
@@ -63,18 +56,19 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
             updateStatus()
             return
         }
-        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
-        if (!isBatteryOptimizationScreenAvailable(intent)) {
-            Toast.makeText(this, getString(R.string.battery_optimization_unsupported), Toast.LENGTH_LONG).show()
-            binding.btnBatteryOpt.visibility = View.GONE
+        // No system "battery optimization" screen exists on Android TV
+        // (TvSettings only stubs the intent for CTS) — whitelist directly
+        // through the Shizuku shell-UID UserService instead, no dialog.
+        val svc = GamepadBridge.service
+        if (svc == null) {
+            Toast.makeText(this, getString(R.string.grant_shizuku_first), Toast.LENGTH_SHORT).show()
             return
         }
         try {
-            startActivity(intent)
-        } catch (e: ActivityNotFoundException) {
-            Toast.makeText(this, getString(R.string.battery_optimization_unsupported), Toast.LENGTH_LONG).show()
-            binding.btnBatteryOpt.visibility = View.GONE
+            svc.ignoreBatteryOptimizations(packageName)
+        } catch (_: Exception) {
         }
+        updateStatus()
     }
 
     private fun requestShizuku() {
@@ -133,8 +127,6 @@ class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListe
 
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         val batteryExempt = pm.isIgnoringBatteryOptimizations(packageName)
-        val batteryIntent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
-        val batterySupported = isBatteryOptimizationScreenAvailable(batteryIntent)
-        binding.btnBatteryOpt.visibility = if (batteryExempt || !batterySupported) View.GONE else View.VISIBLE
+        binding.btnBatteryOpt.visibility = if (batteryExempt) View.GONE else View.VISIBLE
     }
 }

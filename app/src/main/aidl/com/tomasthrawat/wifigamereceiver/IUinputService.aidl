@@ -7,6 +7,7 @@ interface IUinputService {
     void sendButton(int keyCode, boolean down);
     void sendDpad(int x, int y);
     void sendJoystick(int x, int y);
+    void ignoreBatteryOptimizations(String packageName);
     void unregisterDevice();
     void destroy();
 }

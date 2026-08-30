@@ -47,6 +47,21 @@ class UinputUserService : IUinputService.Stub() {
         write(UinputProtocol.stickCommand(deviceId, x, y))
     }
 
+    override fun ignoreBatteryOptimizations(packageName: String) {
+        // This process is already shell UID (how Shizuku UserService works),
+        // so this is the exact equivalent of running the command over ADB —
+        // it works even on Android TV, where TvSettings never ships a real
+        // "battery optimization" screen (its intent-filter for
+        // REQUEST_IGNORE_BATTERY_OPTIMIZATIONS is a CTS-only stub with no UI).
+        try {
+            ProcessBuilder("dumpsys", "deviceidle", "whitelist", "+$packageName")
+                .redirectErrorStream(true)
+                .start()
+                .waitFor()
+        } catch (_: Exception) {
+        }
+    }
+
     override fun unregisterDevice() {
         // Closing stdin sends EOF to the uinput process, which unregisters
         // the device automatically — there is no explicit unregister command.
