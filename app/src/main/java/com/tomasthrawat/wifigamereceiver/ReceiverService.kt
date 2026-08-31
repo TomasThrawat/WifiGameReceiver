@@ -20,13 +20,18 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.NetworkInterface
+import java.util.Collections
 
 class ReceiverService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.IO + Job())
     private var runJob: Job? = null
+    private var beaconJob: Job? = null
     private var socket: DatagramSocket? = null
+    private var beaconSocket: DatagramSocket? = null
     private var gamepad: UinputGamepadClient? = null
     private lateinit var prefs: SharedPreferences
 
@@ -79,6 +84,10 @@ class ReceiverService : Service() {
         ReceiverStatus.state.value = ReceiverStatus.State.CONNECTED
         updateNotification("متصل — بانتظار أوامر الموبايل على UDP:$udpPort")
 
+        if (beaconJob == null) {
+            beaconJob = scope.launch { beaconLoop(udpPort) }
+        }
+
         val s = DatagramSocket(null).apply {
             reuseAddress = true
             bind(InetSocketAddress(udpPort))
@@ -95,6 +104,53 @@ class ReceiverService : Service() {
                 if (isActiveService()) Log.w(TAG, "udp receive error: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Broadcasts "WGCTV1|<name>|<ip>|<controlPort>" to 255.255.255.255:BEACON_PORT once a
+     * second while connected, so WifiGameController's discovery screen can list this TV
+     * without the user typing an IP/port by hand.
+     */
+    private suspend fun beaconLoop(controlPort: Int) {
+        val bSocket = try {
+            DatagramSocket().apply { broadcast = true }
+        } catch (e: Exception) {
+            Log.w(TAG, "beacon socket open failed: ${e.message}")
+            return
+        }
+        beaconSocket = bSocket
+        val deviceName = Build.MODEL?.takeIf { it.isNotBlank() } ?: "WifiGameReceiver"
+        val broadcastAddr = InetAddress.getByName("255.255.255.255")
+        while (isActiveService()) {
+            try {
+                val ip = localIpAddress()
+                if (ip != null) {
+                    val msg = "WGCTV1|$deviceName|$ip|$controlPort"
+                    val data = msg.toByteArray(Charsets.UTF_8)
+                    bSocket.send(DatagramPacket(data, data.size, broadcastAddr, BEACON_PORT))
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "beacon send failed: ${e.message}")
+            }
+            delay(1000)
+        }
+    }
+
+    /** First non-loopback IPv4 address — what goes in the beacon and is shown on-screen. */
+    private fun localIpAddress(): String? {
+        try {
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            for (intf in interfaces) {
+                val addrs = Collections.list(intf.inetAddresses)
+                for (addr in addrs) {
+                    if (!addr.isLoopbackAddress && addr.hostAddress?.contains(":") == false) {
+                        return addr.hostAddress
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+        return null
     }
 
     private fun handleMessage(msg: String) {
@@ -119,7 +175,10 @@ class ReceiverService : Service() {
         ReceiverStatus.state.value = ReceiverStatus.State.STOPPED
         runJob?.cancel()
         runJob = null
+        beaconJob?.cancel()
+        beaconJob = null
         socket?.close()
+        beaconSocket?.close()
         val g = gamepad
         scope.launch { g?.disconnect() }
         super.onDestroy()
@@ -157,6 +216,7 @@ class ReceiverService : Service() {
         private const val CHANNEL_ID = "receiver_channel"
         private const val NOTIF_ID = 1
         private const val LOOPBACK = "127.0.0.1"
+        const val BEACON_PORT = 8767
 
         const val PREFS = "receiver_prefs"
         const val KEY_UDP_PORT = "udp_port"
