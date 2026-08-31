@@ -1,61 +1,54 @@
 # WifiGameReceiver
 
-Kotlin Android receiver for **[WifiGameController](https://github.com/TomasThrawat/WifiGameController)**. Turns this phone/tablet into a **real virtual gamepad** that any app or game on the device can see — driven by the exact same local-WiFi UDP protocol the controller app sends.
+Companion app for [WifiGameController](https://github.com/TomasThrawat/WifiGameController) that runs **on the TV itself** and fixes the reliability problem of that project's ADB mode.
 
-## Why Shizuku, and why `uinput`
+## Why this exists
 
-A normal (non-root) Android app cannot inject input events for other apps — that needs the system `INJECT_EVENTS` permission. Two ways around that without root:
+WifiGameController's ADB mode has the phone open an ADB connection **over WiFi, to the TV's remote IP**, and drive `/system/bin/uinput` through it. That ADB stream — TLS/CNXN/AUTH handshake plus the live `exec:uinput -` shell stream — has to survive the entire session over a real wireless link. Any WiFi hiccup (RSSI dip, AP roam, DHCP renewal, doze-mode radio throttling) can drop it mid-session, which is the "الاتصال بيقع / معلش نتأكد" problem.
 
-- **Shizuku** gives an app a Binder connection running at the **shell (ADB) UID**, no root needed — just Shizuku running (via wireless debugging or a one-time `adb` command).
-- AOSP ships a small **`uinput`** command-line tool (`frameworks/base/cmds/uinput`) built exactly for this: it registers a virtual kernel input device (keyboard, gamepad, joystick, whatever you configure) and lets you inject raw evdev events into it over stdin. CTS uses it this way, run as shell — so shell-level access is enough to run it too, no root required *on AOSP-compliant devices*.
+This app inverts that: **the TV connects to itself.**
 
-Because the resulting device is a **real kernel input device** (not a fake overlay), any app — an emulator, a game, anything reading `SOURCE_GAMEPAD`/`SOURCE_JOYSTICK`/`SOURCE_DPAD` — sees it exactly like a real USB/Bluetooth controller.
+- `TvAdbConnectionManager` + `UinputGamepadClient` here are the *same* RSA-keypair-and-`exec:uinput -` client WifiGameController's mobile app already uses — copied verbatim, because the uinput/ADB protocol doesn't care whether the transport underneath is a LAN socket or loopback.
+- The only thing that changed is the target: `connect("127.0.0.1", adbPort)` instead of the TV's LAN IP. That connection never leaves the device, so it can't be affected by WiFi conditions at all.
+- The phone side needs **no changes** — WifiGameController's existing **UDP mode** (already in the repo, already fire-and-forget/lossy-tolerant by design) is pointed at this app's IP:port instead of a UDP listener that didn't exist before. `A:1`/`A:0`/`JOY:x,y` in, `uinput inject` out.
 
-The app does **not** use the older `Shizuku.newProcess()` helper (Shizuku's own team has deprecated/hidden it and recommends against it — no tty support, unreliable for a long-lived interactive process). Instead it uses a Shizuku **`UserService`**: a small privileged component (`UinputUserService`) that runs in its own process at shell UID and spawns `/system/bin/uinput -` directly with `ProcessBuilder`, keeping its stdin open for the life of the session.
+```
+Phone (WifiGameController, UDP mode)
+   │  UDP  "A:1" / "JOY:0.3,-0.8"   (only thing crossing WiFi — lossy-tolerant)
+   ▼
+TV (WifiGameReceiver)
+   │  ADB exec:uinput -  over 127.0.0.1   (never leaves the device)
+   ▼
+Android input stack → virtual gamepad
+```
 
-## Requirements
+## What loopback does and doesn't fix
 
-- Shizuku installed and **running** (you said it already is — good, this app needs nothing else set up on that front).
-- Same WiFi network as the phone running WifiGameController.
+- **Fixes:** the ADB/uinput leg can no longer drop because of WiFi — it's not on WiFi.
+- **Doesn't fix:** adbd itself (whether started via classic "Network debugging" or Wireless debugging) still listens on all interfaces, not just `127.0.0.1` — that's inherent to how Android's ADB-over-network works, not something an app can restrict from inside. Anyone else on the same WiFi could still attempt an AUTH handshake against a *different* key. Same caveat WifiGameController's own README already states; this app doesn't change it either way, it just stops relying on that network path for its own traffic.
 
-> **Note on non-AOSP devices (OEM SELinux):** the `uinput` binary and its shell-level access are AOSP-documented and used by CTS as shell, but individual OEM skins (heavily customized SELinux policies, e.g. some ColorOS/MIUI-style builds) can restrict `/dev/uinput` access beyond stock AOSP. If `Register device` fails in the app, that's the most likely cause — this is a device-policy limitation, not something the app can work around.
+## One-time TV setup
 
-## Setup
-
-1. Open the app, tap **Grant Shizuku permission** and accept the prompt in Shizuku.
-2. Enter the same UDP port you used in WifiGameController's connect screen.
-3. Tap **Start**. The app registers the virtual gamepad and starts listening.
-4. On the other phone, open WifiGameController, enter this device's local IP + the same port, and play.
-
-## Protocol (matches WifiGameController exactly)
-
-| Message | Meaning |
-|---|---|
-| `A:1` / `A:0` | Button A down / up |
-| `B:1` / `B:0` | Button B down / up |
-| `X:1` / `X:0` | Button X down / up |
-| `Y:1` / `Y:0` | Button Y down / up |
-| `START:1` / `START:0` | Start down / up |
-| `SELECT:1` / `SELECT:0` | Select down / up |
-| `UP:1/0`, `DOWN:1/0`, `LEFT:1/0`, `RIGHT:1/0` | D-pad, combined into one hat-axis update |
-| `JOY:x,y` | Analog stick, floats -1.0..1.0, streamed ~20/sec |
-
-Buttons map to Linux gamepad key codes (`BTN_A`, `BTN_B`, ...); the D-pad maps to `ABS_HAT0X`/`ABS_HAT0Y`; the joystick maps to `ABS_X`/`ABS_Y` scaled to ±255. See `UinputProtocol.kt`.
-
-Reference for the `uinput` command's register/inject JSON protocol: https://android.googlesource.com/platform/frameworks/base/+/main/cmds/uinput/README.md
+1. Settings → About → tap Build number 7 times → Developer options.
+2. Either:
+   - **Classic Android TV toggle** — Developer options → **Network debugging** → on. Fixed port, default `5555`, no pairing code. Leave "Pairing port"/"Pairing code" blank in the app.
+   - **Wireless debugging** (if that's what your TV/box exposes instead) — Developer options → **Wireless debugging** → on → **Pair device with pairing code**. Enter the shown pairing port + 6-digit code into this app once; the ADB connect port shown on the main Wireless debugging screen goes in "ADB port".
+3. Install and open this app on the TV, set the ports, tap **ابدأ الاستقبال**.
+4. First connect triggers the TV's own **"Allow debugging?"** popup — accept it (check "always allow"). This is a one-time, on-device prompt; nothing to accept on the phone.
+5. On the phone, open WifiGameController, switch to **UDP mode**, enter the TV's IP (shown at the top of this app's screen) and the UDP port (default `8766`).
 
 ## Project structure
 
-- `MainActivity` — Shizuku permission flow, port entry, start/stop
-- `GamepadBridge` — binds the Shizuku `UserService`
-- `UinputUserService` — runs at shell UID, owns the `uinput` process
-- `UinputProtocol` — builds the register/inject JSON commands + event codes
-- `UdpReceiverService` — foreground service, UDP socket, protocol parsing
+- `MainActivity` — setup screen (shows LAN IP, ports, pairing fields, start/stop, live status)
+- `ReceiverService` — foreground service; owns both the local ADB/uinput connection and the UDP listener
+- `BootReceiver` — restarts the service after a TV reboot
+- `ReceiverApp` — registers Conscrypt (only exercised by the optional pairing path)
+- `adb/TvAdbConnectionManager`, `adb/UinputGamepadClient` — unmodified logic from WifiGameController's ADB mode
 
 ## Build
 
-CI builds a debug APK on every push to `main` via `.github/workflows/build.yml` (uses the Gradle GitHub Action directly, no committed Gradle wrapper jar) — grab it from the workflow run's **Artifacts**. Locally: open in Android Studio, or run `gradle assembleDebug` with Gradle 8.7+ and Android SDK 34 installed.
+```
+gradle assembleDebug
+```
 
-## Permissions
-
-`INTERNET`, `ACCESS_WIFI_STATE`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`, and the Shizuku API permission — no root, no Bluetooth, no cloud relay.
+Also builds via GitHub Actions on push to `main` (`.github/workflows/build.yml`) — grab the APK from the run's Artifacts.

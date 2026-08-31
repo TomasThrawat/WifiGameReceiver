@@ -1,135 +1,82 @@
 package com.tomasthrawat.wifigamereceiver
 
+import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.SharedPreferences
 import android.os.Bundle
-import android.os.PowerManager
-import android.view.View
-import android.widget.Toast
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.tomasthrawat.wifigamereceiver.databinding.ActivityMainBinding
-import rikka.shizuku.Shizuku
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import java.net.NetworkInterface
+import java.util.Collections
 
-class MainActivity : AppCompatActivity(), Shizuku.OnRequestPermissionResultListener {
+class MainActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityMainBinding
-    private var serviceRunning = false
-
-    companion object {
-        private const val SHIZUKU_REQUEST_CODE = 9001
-    }
+    private lateinit var prefs: SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(R.layout.activity_main)
 
-        Shizuku.addBinderReceivedListenerSticky { updateStatus() }
-        Shizuku.addBinderDeadListener { updateStatus() }
+        prefs = getSharedPreferences(ReceiverService.PREFS, Context.MODE_PRIVATE)
 
-        binding.editPort.setText("5555")
-        updateStatus()
+        val ipText = findViewById<TextView>(R.id.ipText)
+        val statusText = findViewById<TextView>(R.id.statusText)
+        val udpPortInput = findViewById<EditText>(R.id.udpPortInput)
+        val adbPortInput = findViewById<EditText>(R.id.adbPortInput)
+        val pairPortInput = findViewById<EditText>(R.id.pairPortInput)
+        val pairCodeInput = findViewById<EditText>(R.id.pairCodeInput)
+        val startButton = findViewById<Button>(R.id.startButton)
+        val stopButton = findViewById<Button>(R.id.stopButton)
 
-        binding.btnGrantShizuku.setOnClickListener { requestShizuku() }
-        binding.btnBatteryOpt.setOnClickListener { requestBatteryOptimizationExemption() }
-        binding.btnStart.setOnClickListener {
-            if (!serviceRunning) startReceiver() else stopReceiver()
+        ipText.text = getString(R.string.tv_ip_label, localIpAddress() ?: "—")
+
+        udpPortInput.setText(prefs.getInt(ReceiverService.KEY_UDP_PORT, ReceiverService.DEFAULT_UDP_PORT).toString())
+        adbPortInput.setText(prefs.getInt(ReceiverService.KEY_ADB_PORT, ReceiverService.DEFAULT_ADB_PORT).toString())
+        prefs.getInt(ReceiverService.KEY_PAIR_PORT, 0).let { if (it > 0) pairPortInput.setText(it.toString()) }
+
+        startButton.setOnClickListener {
+            prefs.edit()
+                .putInt(ReceiverService.KEY_UDP_PORT, udpPortInput.text.toString().toIntOrNull() ?: ReceiverService.DEFAULT_UDP_PORT)
+                .putInt(ReceiverService.KEY_ADB_PORT, adbPortInput.text.toString().toIntOrNull() ?: ReceiverService.DEFAULT_ADB_PORT)
+                .putInt(ReceiverService.KEY_PAIR_PORT, pairPortInput.text.toString().toIntOrNull() ?: 0)
+                .putString(ReceiverService.KEY_PAIR_CODE, pairCodeInput.text.toString().trim())
+                .apply()
+            ContextCompat.startForegroundService(this, Intent(this, ReceiverService::class.java))
+        }
+
+        stopButton.setOnClickListener {
+            stopService(Intent(this, ReceiverService::class.java))
+        }
+
+        lifecycleScope.launch {
+            ReceiverStatus.state.collect { state ->
+                statusText.text = when (state) {
+                    ReceiverStatus.State.STOPPED -> getString(R.string.status_stopped)
+                    ReceiverStatus.State.CONNECTING_ADB -> getString(R.string.status_starting)
+                    ReceiverStatus.State.CONNECTED -> getString(R.string.status_connected)
+                }
+            }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        Shizuku.addRequestPermissionResultListener(this)
-        updateStatus()
-    }
-
-    override fun onPause() {
-        Shizuku.removeRequestPermissionResultListener(this)
-        super.onPause()
-    }
-
-    private fun requestBatteryOptimizationExemption() {
-        val pm = getSystemService(POWER_SERVICE) as PowerManager
-        if (pm.isIgnoringBatteryOptimizations(packageName)) {
-            Toast.makeText(this, getString(R.string.battery_optimization_already_disabled), Toast.LENGTH_SHORT).show()
-            updateStatus()
-            return
-        }
-        // No system "battery optimization" screen exists on Android TV
-        // (TvSettings only stubs the intent for CTS) — whitelist directly
-        // through the Shizuku shell-UID UserService instead, no dialog.
-        val svc = GamepadBridge.service
-        if (svc == null) {
-            Toast.makeText(this, getString(R.string.grant_shizuku_first), Toast.LENGTH_SHORT).show()
-            return
-        }
+    private fun localIpAddress(): String? {
         try {
-            svc.ignoreBatteryOptimizations(packageName)
+            val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())
+            for (intf in interfaces) {
+                val addrs = Collections.list(intf.inetAddresses)
+                for (addr in addrs) {
+                    if (!addr.isLoopbackAddress && addr.hostAddress?.contains(":") == false) {
+                        return addr.hostAddress
+                    }
+                }
+            }
         } catch (_: Exception) {
         }
-        updateStatus()
-    }
-
-    private fun requestShizuku() {
-        if (!Shizuku.pingBinder()) {
-            Toast.makeText(this, getString(R.string.shizuku_not_running), Toast.LENGTH_LONG).show()
-            return
-        }
-        if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-            GamepadBridge.bind()
-            updateStatus()
-        } else {
-            Shizuku.requestPermission(SHIZUKU_REQUEST_CODE)
-        }
-    }
-
-    override fun onRequestPermissionResult(requestCode: Int, grantResult: Int) {
-        if (requestCode == SHIZUKU_REQUEST_CODE) {
-            if (grantResult == PackageManager.PERMISSION_GRANTED) {
-                GamepadBridge.bind()
-            } else {
-                Toast.makeText(this, getString(R.string.shizuku_permission_denied), Toast.LENGTH_LONG).show()
-            }
-            updateStatus()
-        }
-    }
-
-    private fun startReceiver() {
-        val port = binding.editPort.text.toString().toIntOrNull()
-        if (port == null || port !in 1024..65535) {
-            Toast.makeText(this, getString(R.string.invalid_port), Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (!GamepadBridge.isBound) {
-            Toast.makeText(this, getString(R.string.grant_shizuku_first), Toast.LENGTH_SHORT).show()
-            return
-        }
-        val intent = Intent(this, UdpReceiverService::class.java).putExtra(UdpReceiverService.EXTRA_PORT, port)
-        ContextCompat.startForegroundService(this, intent)
-        serviceRunning = true
-        binding.btnStart.setText(R.string.stop)
-        updateStatus()
-    }
-
-    private fun stopReceiver() {
-        stopService(Intent(this, UdpReceiverService::class.java))
-        serviceRunning = false
-        binding.btnStart.setText(R.string.start)
-        updateStatus()
-    }
-
-    private fun updateStatus() {
-        val shizukuReady = Shizuku.pingBinder() &&
-            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-        if (shizukuReady && !GamepadBridge.isBound) {
-            GamepadBridge.bind()
-        }
-        binding.textStatus.text = if (shizukuReady) getString(R.string.status_ready) else getString(R.string.status_not_ready)
-        binding.btnGrantShizuku.visibility = if (shizukuReady) View.GONE else View.VISIBLE
-
-        val pm = getSystemService(POWER_SERVICE) as PowerManager
-        val batteryExempt = pm.isIgnoringBatteryOptimizations(packageName)
-        binding.btnBatteryOpt.visibility = if (batteryExempt) View.GONE else View.VISIBLE
+        return null
     }
 }

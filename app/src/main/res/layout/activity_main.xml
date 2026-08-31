@@ -3,45 +3,71 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center"
-    android:padding="24dp"
-    android:background="@color/oled_black">
+    android:padding="32dp">
 
     <TextView
-        android:id="@+id/textStatus"
+        android:id="@+id/ipText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textColor="@color/oled_white"
+        android:textSize="20sp"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:textSize="16sp"
         android:layout_marginBottom="24dp" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnGrantShizuku"
+    <EditText
+        android:id="@+id/udpPortInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/grant_shizuku" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnBatteryOpt"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="@string/battery_optimization" />
+        android:inputType="number"
+        android:hint="@string/udp_port_label" />
 
     <EditText
-        android:id="@+id/editPort"
+        android:id="@+id/adbPortInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:hint="@string/port_hint"
         android:inputType="number"
-        android:textColor="@color/oled_white" />
+        android:hint="@string/adb_port_label" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnStart"
+    <EditText
+        android:id="@+id/pairPortInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="@string/start" />
+        android:inputType="number"
+        android:hint="@string/pair_port_label" />
+
+    <EditText
+        android:id="@+id/pairCodeInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="number"
+        android:hint="@string/pair_code_label" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="24dp">
+
+        <Button
+            android:id="@+id/startButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/start_button" />
+
+        <Button
+            android:id="@+id/stopButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="16dp"
+            android:text="@string/stop_button" />
+
+    </LinearLayout>
 
 </LinearLayout>
