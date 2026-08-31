@@ -4,9 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -26,6 +28,7 @@ class MainActivity : AppCompatActivity() {
 
         val ipText = findViewById<TextView>(R.id.ipText)
         val statusText = findViewById<TextView>(R.id.statusText)
+        val openDevOptionsButton = findViewById<Button>(R.id.openDevOptionsButton)
         val udpPortInput = findViewById<EditText>(R.id.udpPortInput)
         val adbPortInput = findViewById<EditText>(R.id.adbPortInput)
         val pairPortInput = findViewById<EditText>(R.id.pairPortInput)
@@ -38,6 +41,25 @@ class MainActivity : AppCompatActivity() {
         udpPortInput.setText(prefs.getInt(ReceiverService.KEY_UDP_PORT, ReceiverService.DEFAULT_UDP_PORT).toString())
         adbPortInput.setText(prefs.getInt(ReceiverService.KEY_ADB_PORT, ReceiverService.DEFAULT_ADB_PORT).toString())
         prefs.getInt(ReceiverService.KEY_PAIR_PORT, 0).let { if (it > 0) pairPortInput.setText(it.toString()) }
+
+        // Jumps straight to the system "Developer options" screen (documented
+        // AOSP intent action, android.provider.Settings.
+        // ACTION_APPLICATION_DEVELOPMENT_SETTINGS, verified against
+        // developer.android.com's Settings reference) instead of Settings >
+        // About > tapping Build number. There is no public/documented intent
+        // that opens the "Wireless debugging → Pair device with pairing
+        // code" sub-screen directly — that fragment is internal to the
+        // Settings app and not exposed as an API — so from Developer
+        // options the user still taps Wireless debugging → Pair device
+        // themselves, but skips the longer navigation path and can screenshot
+        // the code without having left this app's task first.
+        openDevOptionsButton.setOnClickListener {
+            try {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+            } catch (_: Exception) {
+                Toast.makeText(this, R.string.dev_options_not_found, Toast.LENGTH_LONG).show()
+            }
+        }
 
         startButton.setOnClickListener {
             prefs.edit()
@@ -64,6 +86,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** First non-loopback IPv4 address — this is what goes in the phone app's UDP host field. */
     private fun localIpAddress(): String? {
         try {
             val interfaces = Collections.list(NetworkInterface.getNetworkInterfaces())

@@ -11,4 +11,6 @@
     <string name="pair_code_label">Pairing code (اختياري — 6 أرقام)</string>
     <string name="start_button">ابدأ الاستقبال</string>
     <string name="stop_button">إيقاف</string>
+    <string name="open_dev_options_button">فتح Developer options (لـ Wireless debugging)</string>
+    <string name="dev_options_not_found">مفيش شاشة Developer options على الجهاز ده — فعّلها يدويًا من About أولاً</string>
 </resources>
