@@ -26,17 +26,23 @@ class UinputGamepadClient(context: Context) {
 
     private val deviceId = 1
 
+    // Numeric Linux input-event-codes (bionic libc/kernel/uapi/linux/input-event-codes.h).
+    // AOSP's `uinput` cmd (frameworks/base cmds/uinput, Event.java/Device.java on
+    // android14-release) parses these fields with Integer.decode(), which only accepts
+    // decimal/hex numbers — NOT symbolic names like "BTN_SOUTH". Symbolic strings here
+    // throw NumberFormatException -> "Error reading in object, ignoring." and kill the
+    // uinput process. Keep these as raw Int codes, never symbolic names.
     private val buttonToKeyCode = mapOf(
-        "A" to "BTN_SOUTH",
-        "B" to "BTN_EAST",
-        "X" to "BTN_WEST",
-        "Y" to "BTN_NORTH",
-        "START" to "BTN_START",
-        "SELECT" to "BTN_SELECT",
-        "UP" to "BTN_DPAD_UP",
-        "DOWN" to "BTN_DPAD_DOWN",
-        "LEFT" to "BTN_DPAD_LEFT",
-        "RIGHT" to "BTN_DPAD_RIGHT"
+        "A" to 304,      // BTN_SOUTH / BTN_A
+        "B" to 305,      // BTN_EAST / BTN_B
+        "X" to 308,      // BTN_WEST / BTN_Y
+        "Y" to 307,      // BTN_NORTH / BTN_X
+        "START" to 315,  // BTN_START
+        "SELECT" to 314, // BTN_SELECT
+        "UP" to 544,     // BTN_DPAD_UP
+        "DOWN" to 545,   // BTN_DPAD_DOWN
+        "LEFT" to 546,   // BTN_DPAD_LEFT
+        "RIGHT" to 547   // BTN_DPAD_RIGHT
     )
 
     suspend fun pair(host: String, pairPort: Int, pairingCode: String): Boolean =
@@ -67,7 +73,7 @@ class UinputGamepadClient(context: Context) {
     }
 
     private fun registerDevice() {
-        val keyBits = buttonToKeyCode.values.joinToString(",") { "\"$it\"" }
+        val keyBits = buttonToKeyCode.values.joinToString(",")
         val json = """
             {
               "id": $deviceId,
@@ -77,13 +83,13 @@ class UinputGamepadClient(context: Context) {
               "pid": 1,
               "bus": "bluetooth",
               "configuration": [
-                {"type":"UI_SET_EVBIT", "data":["EV_KEY", "EV_ABS"]},
-                {"type":"UI_SET_KEYBIT", "data":[$keyBits]},
-                {"type":"UI_SET_ABSBIT", "data":["ABS_X", "ABS_Y"]}
+                {"type":100, "data":[1, 3]},
+                {"type":101, "data":[$keyBits]},
+                {"type":103, "data":[0, 1]}
               ],
               "abs_info": [
-                {"code":"ABS_X", "info": {"value":0, "minimum":-255, "maximum":255, "fuzz":0, "flat":16, "resolution":0}},
-                {"code":"ABS_Y", "info": {"value":0, "minimum":-255, "maximum":255, "fuzz":0, "flat":16, "resolution":0}}
+                {"code":0, "info": {"value":0, "minimum":-255, "maximum":255, "fuzz":0, "flat":16, "resolution":0}},
+                {"code":1, "info": {"value":0, "minimum":-255, "maximum":255, "fuzz":0, "flat":16, "resolution":0}}
               ]
             }
         """.trimIndent()
@@ -98,8 +104,8 @@ class UinputGamepadClient(context: Context) {
         val value = if (pressed) 1 else 0
         val json = """
             {"id": $deviceId, "command": "inject", "events": [
-              "EV_KEY", "$key", $value,
-              "EV_SYN", "SYN_REPORT", 0
+             1, $key, $value,
+             0, 0, 0
             ]}
         """.trimIndent()
         writeLine(json)
@@ -110,9 +116,9 @@ class UinputGamepadClient(context: Context) {
         val iy = (y.coerceIn(-1f, 1f) * 255).toInt()
         val json = """
             {"id": $deviceId, "command": "inject", "events": [
-              "EV_ABS", "ABS_X", $ix,
-              "EV_ABS", "ABS_Y", $iy,
-              "EV_SYN", "SYN_REPORT", 0
+              3, 0, $ix,
+              3, 1, $iy,
+              0, 0, 0
             ]}
         """.trimIndent()
         writeLine(json)
